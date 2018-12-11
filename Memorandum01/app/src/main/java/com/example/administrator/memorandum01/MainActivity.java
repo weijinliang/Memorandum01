@@ -1,0 +1,180 @@
+package com.example.administrator.memorandum01;
+
+import android.app.AlarmManager;
+import android.app.Dialog;
+import android.app.PendingIntent;
+import android.app.TimePickerDialog;
+import android.content.Context;
+import android.content.Intent;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.os.Bundle;
+import android.support.design.widget.FloatingActionButton;
+import android.support.design.widget.Snackbar;
+import android.support.v4.widget.SimpleCursorAdapter;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.Toolbar;
+import android.util.Log;
+import android.view.ContextMenu;
+import android.view.View;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.widget.AdapterView;
+import android.widget.ImageButton;
+import android.widget.ListView;
+import android.widget.TextView;
+import android.widget.TimePicker;
+import android.widget.Toast;
+
+import java.util.Calendar;
+
+public class MainActivity extends AppCompatActivity {
+
+    private AlarmManager alarmManager=null;
+    Calendar cal=Calendar.getInstance();
+    final  int DIALOG_TIME=0;//设置对话框id
+
+    private DbHelper dbhelper;
+    private SQLiteDatabase db;
+
+    SimpleCursorAdapter adapter=null;
+    ListView lv;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        alarmManager=(AlarmManager)getSystemService(Context.ALARM_SERVICE);
+        dbhelper=new DbHelper(this,"db_bwl",null,1);
+        db=dbhelper.getReadableDatabase();
+        Cursor cursor=db.query("tb_bwl",new String[]{"id as _id","title","content","noticeDate","noticeTime"},null,null,null,null,null);
+        lv=(ListView)findViewById(R.id.lv_bwlList);
+        adapter=new SimpleCursorAdapter(this,R.layout.list_item_bwl,cursor,new  String[]{"title","noticeDate","noticeTime","content"},new int[]{R.id.title,R.id.noticeDate,R.id.noticeTime,R.id.content});
+        lv.setAdapter(adapter);
+        this.registerForContextMenu(lv);
+        lv.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                String title=((TextView)view.findViewById(R.id.title)).getText().toString();
+                String content = ((TextView)view.findViewById(R.id.content)).getText().toString();
+                String noticeDate = ((TextView)view.findViewById(R.id.noticeDate)).getText().toString();
+                String noticeTime = ((TextView)view.findViewById(R.id.noticeTime)).getText().toString();
+                Intent intent=new Intent();
+                intent.setClass(MainActivity.this,AddBwlActivity.class);
+                Bundle bundle=new Bundle();
+                bundle.putLong("id",id);
+                bundle.putString("title",title);
+                bundle.putString("content",content);
+                bundle.putString("noticeDate",noticeDate);
+                bundle.putString("noticeTime",noticeTime);
+                intent.putExtras(bundle);
+                startActivity(intent);
+            }
+        });
+        //添加备忘录按钮
+        ImageButton btnAdd=(ImageButton)findViewById(R.id.btnAdd);
+        btnAdd.setOnClickListener(new View.OnClickListener(){
+            @Override
+            public void onClick(View view){
+                Intent intent=new Intent(MainActivity.this,AddBwlActivity.class);
+                startActivity(intent);
+            }
+        });
+        //		//创建两个Intent,一个是用于AlarmReceiver类处理的，一个是用于广播的
+//		AlarmManager am = (AlarmManager)getSystemService(Context.ALARM_SERVICE);
+//		Intent intent = new Intent(MainActivity.this,AlarmReceiver.class);
+//		intent.setAction("ALARM_ACTION");
+//		PendingIntent pendingIntent = PendingIntent.getBroadcast(MainActivity.this, 0, intent, 0);
+//
+//		//设置真正能让alarm起作用的参数
+//		//设置alarm是以何种方式发生的，这里用的是以UTC时间为基准，并在alarm发生时同时唤醒设备的模式。
+//		am.set(AlarmManager.RTC_WAKEUP,System.currentTimeMillis(),pendingIntent);
+//		am.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + 10*1000, 60*60*1000, pendingIntent);
+    }
+    //长按的上下文菜单
+    public void onCreateContextMenu(ContextMenu menu, View view, ContextMenu.ContextMenuInfo menuInfo){
+        menu.setHeaderIcon(R.drawable.alarm);
+        menu.add(0,3,0,"修改");
+        menu.add(0,4,0,"删除");
+    }
+    public boolean onContextItemSelected(MenuItem item){
+        AdapterView.AdapterContextMenuInfo menuInfo=(AdapterView.AdapterContextMenuInfo)item.getMenuInfo();
+        switch (item.getItemId()){
+            case 3:
+                String title=((TextView)menuInfo.targetView.findViewById(R.id.title)).getText().toString();
+                String content = ((TextView)menuInfo.targetView.findViewById(R.id.content)).getText().toString();
+                String noticeDate = ((TextView)menuInfo.targetView.findViewById(R.id.noticeDate)).getText().toString();
+                String noticeTime = ((TextView)menuInfo.targetView.findViewById(R.id.noticeTime)).getText().toString();
+                Intent intent=new Intent();
+                intent.setClass(this,AddBwlActivity.class);
+                Bundle bundle=new Bundle();
+                bundle.putLong("id",menuInfo.id);
+                bundle.putString("title",title);
+                bundle.putString("content",content);
+                bundle.putString("noticeDate",noticeDate);
+                bundle.putString("noticeTime",noticeTime);
+                intent.putExtras(bundle);
+                startActivity(intent);
+                break;
+            case 4:
+                dbhelper=new DbHelper(this,"db_bwl",null,1);
+                db=dbhelper.getWritableDatabase();
+                int status=db.delete("tb_bwl","id=?",new String[]{""+menuInfo.id});
+                if(status!=-1){
+                    //删除后更新listview
+                    Cursor cursor=db.query("tb_bwl",new String[]{"id as _id","title","content","noticeDate","noticeTime"},null,null,null,null,null);
+                    adapter.notifyDataSetChanged();
+                    Toast.makeText(this,"删除成功",Toast.LENGTH_LONG);
+                }else{
+                    Toast.makeText(this,"删除失败",Toast.LENGTH_LONG).show();
+                }
+                break;
+        }
+        return true;
+    }
+    @Override
+    protected Dialog onCreateDialog(int id){
+        Dialog dialog=null;
+        switch (id){
+            case DIALOG_TIME:
+                dialog=new TimePickerDialog(this,new TimePickerDialog.OnTimeSetListener(){
+                    public void  onTimeSet(TimePicker timePicker,int hourOfDay,int minute){
+                        //获取日期对象
+                        Calendar c=Calendar.getInstance();
+                        //设置Calender对象
+                        c.setTimeInMillis(System.currentTimeMillis());
+                        //设置闹钟小时数
+                        c.set(Calendar.HOUR,hourOfDay);
+                        //设置闹钟的分钟数
+                        c.set(Calendar.MINUTE,c.get(Calendar.MINUTE)+1);
+                        //设置闹钟的秒数
+                        c.set(Calendar.SECOND,0);
+                        //设置闹钟的毫秒
+                        c.set(Calendar.MILLISECOND,0);
+                        //创建Intent对象
+                        Intent intent=new Intent(MainActivity.this,AlarmReceiver.class);
+                        //创建PendingIntent
+                        PendingIntent pi=PendingIntent.getBroadcast(MainActivity.this,0,intent,0);
+                        //设置闹钟，当前时间就唤醒
+                        alarmManager.set(AlarmManager.RTC_WAKEUP,System.currentTimeMillis()+30000,pi);
+                        //提示用户
+                        Toast.makeText(MainActivity.this,"闹钟设置成功",Toast.LENGTH_LONG).show();
+                    }
+                },
+                cal.get(Calendar.HOUR_OF_DAY),
+                        cal.get(Calendar.MINUTE),
+                        true);
+                break;
+                }
+        Log.e("AndroidBWL","onCreateDialog end...");
+        return dialog;
+        }
+
+    @Override
+    protected void onResume(){
+        super.onResume();
+        Cursor cursor=db.query("tb_bwl",new String[]{"id as _id","title","content","noticeDate","noticeTime"},null,null,null,null,null);
+        adapter.changeCursor(cursor);
+    }
+}
